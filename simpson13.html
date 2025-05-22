@@ -545,12 +545,12 @@
         
         <div class="form-group">
           <label for="a">Límite inferior (a):</label>
-          <input type="number" id="a" value="0" step="any" />
+          <input type="number" id="a" value="4" step="any" />
         </div>
         
         <div class="form-group">
           <label for="b">Límite superior (b):</label>
-          <input type="number" id="b" value="1" step="any" />
+          <input type="number" id="b" value="6" step="any" />
         </div>
         
         <button class="btn-primary" id="calcular">
@@ -577,8 +577,7 @@
             <h3>Resultado de la Integración</h3>
             <div id="result-value"></div>
             <div id="delta-value" style="text-align: center; margin-bottom: 1.5rem; color: #4a5568;"></div>
-            <div id="steps-table-container"></div>
-            <div id="points-table-container"></div>
+            <div id="iterations-table-container" class="calculation-steps"></div>
           </div>
           
           <div class="tab-content" id="graph-tab">
@@ -617,8 +616,7 @@
       const resultCard = document.getElementById('result-card');
       const resultValue = document.getElementById('result-value');
       const deltaValue = document.getElementById('delta-value');
-      const stepsTableContainer = document.getElementById('steps-table-container');
-      const pointsTableContainer = document.getElementById('points-table-container');
+      const iterationsTableContainer = document.getElementById('iterations-table-container');
       const errorMessage = document.getElementById('error-message');
       const graphContainer = document.getElementById('graph-container');
 
@@ -643,11 +641,6 @@
           return;
         }
 
-        if (a >= b) {
-          showError('El límite inferior debe ser menor que el límite superior.');
-          return;
-        }
-
         if (!funcion.trim()) {
           showError('Por favor, ingrese una función válida.');
           return;
@@ -659,126 +652,70 @@
         calculateBtn.disabled = true;
         errorMessage.style.display = 'none';
 
-        // Implementación local de Simpson 1/3 para demostración
-        // En un entorno real, esto debería ser reemplazado por la llamada a la API
-        try {
-          // Parsear la función usando math.js
-          let f;
-          try {
-            f = math.parse(funcion).compile();
-          } catch (e) {
-            throw new Error('Función inválida');
-          }
-
-          // Calcular usando Simpson 1/3
-          const x0 = a;
-          const x1 = (a + b) / 2;
-          const x2 = b;
-          const h = (b - a) / 2;
-
-          const fx0 = f.evaluate({x: x0});
-          const fx1 = f.evaluate({x: x1});
-          const fx2 = f.evaluate({x: x2});
-
-          const resultado = (h / 3) * (fx0 + 4 * fx1 + fx2);
-
-          // Crear el objeto de respuesta similar al que daría la API
-          const data = {
-            funcion: funcion,
-            a: a,
-            b: b,
-            resultado: resultado,
-            puntosX: [x0, x1, x2],
-            valoresF: [fx0, fx1, fx2],
-            delta: h,
-            tablaInteraccion: [
-              { descripcion: "Límite inferior (a)", valor: a },
-              { descripcion: "Límite superior (b)", valor: b },
-              { descripcion: "Punto medio (h)", valor: h },
-              { descripcion: "f(a)", valor: fx0 },
-              { descripcion: "f((a+b)/2)", valor: fx1 },
-              { descripcion: "f(b)", valor: fx2 },
-              { descripcion: "Resultado", valor: resultado }
-            ],
-            tablaValores: [
-              { punto: "0", x: x0, fx: fx0 },
-              { punto: "1", x: x1, fx: fx1 },
-              { punto: "2", x: x2, fx: fx2 }
-            ]
-          };
+        // Llamada a la API para el método Simpson 1/3
+        fetch('https://calculadora-metodos-hwuf.onrender.com/api/integracion/simpson13', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ funcion, a, b })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (typeof data.resultado !== 'number') throw new Error('Respuesta inválida del servidor');
 
           // Mostrar el resultado principal
           resultValue.textContent = `≈ ${data.resultado.toFixed(8)}`;
           
           // Mostrar el valor de delta (h)
-          deltaValue.textContent = `Delta (h): ${data.delta.toFixed(6)}`;
-
-          // Tabla de pasos de cálculo
-          let stepsTableHTML = '<h4>Tabla de iteración</h4>';
-          stepsTableHTML += '<table><thead><tr><th>Descripción</th><th>Valor</th></tr></thead><tbody>';
-          data.tablaInteraccion.forEach((item, index) => {
-            const isResult = item.descripcion === "Resultado";
-            const className = isResult ? 'step-highlight' : '';
-            stepsTableHTML += `<tr class="${className}">
-              <td>${item.descripcion}</td>
-              <td>${typeof item.valor === 'number' ? item.valor.toFixed(6) : item.valor}</td>
-            </tr>`;
-          });
-          stepsTableHTML += '</tbody></table>';
-          stepsTableContainer.innerHTML = stepsTableHTML;
+          deltaValue.textContent = `Delta (h): ${data.delta}`;
 
           // Tabla de puntos evaluados
-          let pointsTableHTML = '<h4>Puntos evaluados</h4>';
-          pointsTableHTML += '<table><thead><tr><th>Punto</th><th>x</th><th>f(x)</th></tr></thead><tbody>';
-          data.tablaValores.forEach(item => {
-            pointsTableHTML += `<tr>
-              <td>x<sub>${item.punto}</sub></td>
-              <td>${item.x}</td>
-              <td>${item.fx.toFixed(6)}</td>
+          let tableHTML = '<h4>Tabla de iteración</h4>';
+          tableHTML += '<table><thead><tr><th>i</th><th>xᵢ</th><th>f(xᵢ)</th></tr></thead><tbody>';
+          
+          data.puntosX.forEach((x, i) => {
+            tableHTML += `<tr>
+              <td>${i}</td>
+              <td>${x}</td>
+              <td>${data.valoresF[i]}</td>
             </tr>`;
           });
-          pointsTableHTML += '</tbody></table>';
-          pointsTableContainer.innerHTML = pointsTableHTML;
+          
+          tableHTML += '</tbody></table>';
+          iterationsTableContainer.innerHTML = tableHTML;
 
           // Gráfica
-          try {
-            graphContainer.innerHTML = '';
-            functionPlot({
-              target: '#graph-container',
-              width: graphContainer.offsetWidth,
-              height: 400,
-              grid: true,
-              xAxis: { domain: [a - (b-a)*0.1, b + (b-a)*0.1] },
-              data: [
-                { 
-                  fn: funcion, 
-                  color: '#667eea',
-                  graphType: 'polyline'
-                },
-                {
-                  points: data.puntosX.map((x, i) => [x, data.valoresF[i]]),
-                  fnType: 'points',
-                  graphType: 'scatter',
-                  color: '#e74c3c',
-                  attr: { r: 4 }
-                }
-              ]
-            });
-          } catch (graphError) {
-            console.warn('Error al crear la gráfica:', graphError);
-            graphContainer.innerHTML = '<p style="text-align: center; color: #718096; padding: 2rem;">No se pudo generar la gráfica</p>';
-          }
+          graphContainer.innerHTML = '';
+          functionPlot({
+            target: '#graph-container',
+            width: graphContainer.offsetWidth,
+            height: 400,
+            grid: true,
+            data: [
+              { fn: funcion, color: '#667eea' },
+              {
+                points: data.puntosX.map((x, i) => [x, data.valoresF[i]]),
+                fnType: 'points',
+                graphType: 'scatter',
+                color: '#e74c3c'
+              }
+            ],
+            annotations: [
+              { x: data.a, text: `a = ${data.a}` },
+              { x: data.b, text: `b = ${data.b}` }
+            ]
+          });
 
           resultCard.style.display = 'block';
-          hideError();
-        } catch (error) {
-          console.error('Error:', error);
-          showError('Error al calcular la integral. Por favor, verifique la función ingresada.');
+        })
+        .catch(err => {
+          console.error(err);
+          showError('Error al comunicarse con el servidor. Por favor, intente nuevamente.');
           resultCard.style.display = 'none';
-        } finally {
-          calculateBtn.innerHTML = originalText;
+        })
+        .finally(() => {
           calculateBtn.disabled = false;
-        }
+          calculateBtn.innerHTML = originalText;
+        });
       });
 
       function showError(message) {
@@ -789,9 +726,6 @@
       function hideError() {
         errorMessage.style.display = 'none';
       }
-
-      // Calcular automáticamente al cargar la página con valores por defecto
-      calculateBtn.click();
     });
   </script>
 </body>
