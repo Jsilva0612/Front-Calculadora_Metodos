@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Método de Boole</title>
+  <title>Método Simpson Abierto</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/function-plot/1.23.2/function-plot.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
+<style>
     * {
       margin: 0;
       padding: 0;
@@ -510,8 +510,8 @@
   <div class="particles" id="particles"></div>
   <header class="header">
     <div class="header-content">
-      <h1>Método de Boole</h1>
-      <div class="method-badge">📊 Integración Numérica</div>
+      <h1>Método de Simpson Abierto</h1>
+      <div class="method-badge">📘 Integración Numérica</div>
     </div>
   </header>
 
@@ -532,11 +532,11 @@
         <h2>Parámetros de Entrada</h2>
         <div class="form-group">
           <label>Método de integración:</label>
-          <input type="text" value="Método de Boole" disabled />
+          <input type="text" value="Método Simpson Abierto" disabled />
         </div>
         <div class="form-group">
           <label for="funcion">Función f(x):</label>
-          <input type="text" id="funcion" value="x^2" />
+          <input type="text" id="funcion" value="x^2 + 2*x + 1" />
         </div>
         <div class="form-group">
           <label for="a">Límite inferior (a):</label>
@@ -544,13 +544,17 @@
         </div>
         <div class="form-group">
           <label for="b">Límite superior (b):</label>
-          <input type="number" id="b" value="4" />
+          <input type="number" id="b" value="3" />
+        </div>
+        <div class="form-group">
+          <label for="n">Número de subdivisiones (n):</label>
+          <input type="number" id="n" value="8" />
         </div>
         <button class="btn-primary" id="calcular"><span>Calcular Integral</span></button>
         <div id="error-message"></div>
         <div class="formula-info">
-          <div class="formula-title">Fórmula de Boole</div>
-          <p>El método de Boole utiliza polinomios de quinto grado para aproximar la función. Es muy preciso para funciones suaves.</p>
+          <div class="formula-title">Fórmula de Simpson Abierto</div>
+          <p>El método de Simpson Abierto no utiliza los extremos del intervalo, lo que lo hace útil cuando la función tiene singularidades en los límites.</p>
         </div>
       </div>
 
@@ -565,8 +569,8 @@
             <h3>Resultado de la Integración</h3>
             <div id="result-value"></div>
             <div id="delta-value" class="delta-info"></div>
-            <div id="steps-table-container" class="calculation-steps"></div>
-            <div id="points-table-container"></div>
+            <div id="formula-applied" class="delta-info"></div>
+            <div id="iterations-table-container" class="calculation-steps"></div>
           </div>
 
           <div class="tab-content" id="graph-tab">
@@ -579,18 +583,17 @@
   </div>
 
   <script>
-    // Reutiliza exactamente el JS del trapezoidal con ajustes a Boole (misma API y estructura de datos)
     document.addEventListener('DOMContentLoaded', function () {
       createParticles();
       const funcionInput = document.getElementById('funcion');
       const aInput = document.getElementById('a');
       const bInput = document.getElementById('b');
+      const nInput = document.getElementById('n');
       const calculateBtn = document.getElementById('calcular');
       const resultCard = document.getElementById('result-card');
       const resultValue = document.getElementById('result-value');
       const deltaValue = document.getElementById('delta-value');
-      const stepsTableContainer = document.getElementById('steps-table-container');
-      const pointsTableContainer = document.getElementById('points-table-container');
+      const iterationsTableContainer = document.getElementById('iterations-table-container');
       const errorMessage = document.getElementById('error-message');
       const graphContainer = document.getElementById('graph-container');
 
@@ -606,35 +609,32 @@
       calculateBtn.addEventListener('click', () => {
         const a = parseFloat(aInput.value);
         const b = parseFloat(bInput.value);
+        const n = parseInt(nInput.value);
         const funcion = funcionInput.value;
 
         errorMessage.style.display = 'none';
         calculateBtn.disabled = true;
         calculateBtn.innerHTML = '<div class="loading"></div>';
 
-        fetch('https://calculadora-metodos-hwuf.onrender.com/api/integracion/boole', {
+        fetch('https://calculadora-metodos-hwuf.onrender.com/api/integracion/simpsonabierto', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ a, b, funcion })
+          body: JSON.stringify({ a, b, n, funcion })
         })
         .then(res => res.json())
         .then(data => {
+          if (typeof data.resultado !== 'number') throw new Error('Respuesta inválida del servidor');
+
           resultValue.textContent = `≈ ${data.resultado.toFixed(8)}`;
           deltaValue.textContent = `Delta (h): ${data.delta}`;
 
-          let stepsTable = `<h4>Tabla de iteración</h4><table><thead><tr><th>Descripción</th><th>Valor</th></tr></thead><tbody>`;
-          data.tablaInteraccion.forEach(item => {
-            stepsTable += `<tr><td>${item.descripcion}</td><td>${item.valor}</td></tr>`;
+          let tableHTML = '<h4>Tabla de iteración</h4>';
+          tableHTML += '<table><thead><tr><th>i</th><th>xᵢ</th><th>f(xᵢ)</th></tr></thead><tbody>';
+          data.puntosX.forEach((x, i) => {
+            tableHTML += `<tr><td>${i}</td><td>${x}</td><td>${data.valoresF[i]}</td></tr>`;
           });
-          stepsTable += '</tbody></table>';
-          stepsTableContainer.innerHTML = stepsTable;
-
-          let pointsTable = `<h4>Puntos evaluados</h4><table><thead><tr><th>Punto</th><th>x</th><th>f(x)</th></tr></thead><tbody>`;
-          data.tablaValores.forEach(item => {
-            pointsTable += `<tr><td>x<sub>${item.punto}</sub></td><td>${item.x}</td><td>${item.fx}</td></tr>`;
-          });
-          pointsTable += '</tbody></table>';
-          pointsTableContainer.innerHTML = pointsTable;
+          tableHTML += '</tbody></table>';
+          iterationsTableContainer.innerHTML = tableHTML;
 
           graphContainer.innerHTML = '';
           functionPlot({
@@ -645,7 +645,7 @@
             data: [
               { fn: funcion, color: '#667eea' },
               {
-                points: data.puntosEvaluados.map((x, i) => [x, data.valoresEvaluados[i]]),
+                points: data.puntosX.map((x, i) => [x, data.valoresF[i]]),
                 fnType: 'points',
                 graphType: 'scatter',
                 color: '#e74c3c'
@@ -660,6 +660,7 @@
           resultCard.style.display = 'block';
         })
         .catch(err => {
+          console.error(err);
           errorMessage.textContent = 'Error al comunicarse con el servidor.';
           errorMessage.style.display = 'block';
           resultCard.style.display = 'none';
